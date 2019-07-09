@@ -60,7 +60,53 @@ class ViewController: UIViewController {
     func startTextDetection() {
         let textRequest = VNDetectTextRectanglesRequest(completionHandler: self.detectTextHandler)
         textRequest.reportCharacterBoxes = true
-        self.requests = [textRequest]
+        let textRecognitionRequest = VNRecognizeTextRequest(completionHandler: self.recognizeTextHandler)
+        textRecognitionRequest.usesLanguageCorrection = false
+        textRecognitionRequest.recognitionLevel = .fast
+        textRecognitionRequest.recognitionLanguages = ["en-US"]
+        textRecognitionRequest.usesLanguageCorrection = false;
+        self.requests = [/*textRequest,*/ textRecognitionRequest];
+    }
+    
+    func recognizeTextHandler(request: VNRequest, error: Error?) {
+        guard let observations = request.results else {
+            print("no result")
+            return
+        }
+        
+        let result = observations.map({$0 as? VNRecognizedTextObservation})
+        
+        DispatchQueue.main.async() {
+            self.imageView.layer.sublayers?.removeSubrange(1...)
+      
+            var detectedText = ""
+
+            // Vision will separate each line, phrase or sentence automatically into separate observations, which we can iterate over
+            for value in result {
+                guard let observation = value else {
+                    continue
+                }
+                // Each observation contains a list of possible 'candidates' that the observation could be, such as ['lol', '1o1', '101']
+                // We can ask for all the topCandidates up to a certain limit.
+                // Each candidate contains the string and the confidence level that it is accurate.
+                guard let topCandidate = observation.topCandidates(1).first else { continue }
+                let str = topCandidate.string;
+                var bb: VNRectangleObservation?
+                do {
+                  bb = try topCandidate.boundingBox(for: str.startIndex ..< str.endIndex)
+                } catch {
+                  print(error)
+                  continue
+                }
+                guard let box = bb else { continue }
+                //print(box)
+                self.highlightLetters(box: box)
+
+                detectedText += topCandidate.string
+                detectedText += "\n"
+            }
+            print(detectedText)
+        }
     }
     
     func detectTextHandler(request: VNRequest, error: Error?) {
@@ -154,7 +200,7 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
             requestOptions = [.cameraIntrinsics:camData]
         }
         
-        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: 6, options: requestOptions)
+        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: /*6*/ .right, options: requestOptions)
         
         do {
             try imageRequestHandler.perform(self.requests)
